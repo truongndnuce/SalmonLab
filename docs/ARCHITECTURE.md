@@ -1,7 +1,9 @@
 # ARCHITECTURE — Blog "Salmon Lab" (Next.js + NestJS)
 
 > Tài liệu kiến trúc để implement blog **Salmon Lab**, lấy **https://fromcodetocloud.info/** làm site mẫu về cấu trúc và giao diện
-> Frontend: **Next.js** · Backend: **NestJS** · Ngôn ngữ nội dung: tiếng Việt (`vi_VN`)
+> Frontend: **Next.js** (`fe/`) · Backend: **NestJS** (`be/`) · Ngôn ngữ nội dung: tiếng Việt (`vi_VN`)
+>
+> **Trạng thái:** Giai đoạn 0–5 đã triển khai (còn thiếu: Sentry phía web, thống kê lượt xem, bài liên quan, đo Lighthouse, Terraform; xem **mục 17**). Những chỗ code thực tế khác bản thiết kế ban đầu được ghi ở **mục 17**; thư mục thực tế là `be/` và `fe/` (không phải `apps/api`, `apps/web`).
 
 ---
 
@@ -49,17 +51,17 @@ Tài liệu được viết sau khi khám phá các trang công khai của site 
 | Lớp | Lựa chọn | Ghi chú |
 |---|---|---|
 | Monorepo | **pnpm workspaces + Turborepo** | Chia sẻ type/schema giữa web và api |
-| Frontend | **Next.js 15 (App Router) + React 19 + TypeScript** | SSG/ISR cho trang public, CSR cho admin |
-| Styling | **Tailwind CSS** + `@tailwindcss/typography` | Giao diện tối giản như site gốc |
+| Frontend | **Next.js 15 (App Router) + React 19 + TypeScript** (thư mục `fe/`) | SSG/ISR cho trang public, CSR cho admin |
+| Styling | **Tailwind CSS v4** + `@tailwindcss/typography` | Cấu hình bằng CSS (`@theme`), không có `tailwind.config.ts`; giao diện tối giản như site gốc |
 | Render Markdown | `unified` (remark + rehype) + **Shiki** | Highlight code, heading anchor, bảng, footnote |
-| Backend | **NestJS 10+ (TypeScript)** | REST API, module hóa |
-| ORM | **Prisma** (hoặc TypeORM nếu bạn quen hơn) | Migration + type-safe |
+| Backend | **NestJS 10 (TypeScript)** (thư mục `be/`) | REST API, module hóa. Các gói `@nestjs/*` phải đúng major tương thích Nest 10 (jwt 10, swagger 7, terminus 10, config 3, event-emitter 2, passport 10, throttler 6, nestjs-pino 4) |
+| ORM | **Prisma 6** | Migration + type-safe. Ghim `^6`: bản `latest` (8.x rc) có CLI khác hoàn toàn |
 | Database | **PostgreSQL 16** | Full-text search với `unaccent` + `pg_trgm` |
-| Lưu file | **Cloudflare R2** (S3-compatible) | Ảnh bìa, ảnh trong bài, file widget; xem mục 10 |
+| Lưu file | **Cloudflare R2** (S3-compatible); dev dùng kho S3 cục bộ (**RustFS**) | Ảnh bìa, ảnh trong bài, file widget; xem mục 10 và 17 |
 | Auth | JWT (access) + refresh token cookie `httpOnly` | Admin duy nhất, mật khẩu băm bằng **argon2** |
 | Validation | `zod` (shared) hoặc `class-validator` | Chia sẻ schema ở `packages/shared` |
 | API docs | `@nestjs/swagger` | OpenAPI → có thể generate client cho web |
-| Test | Jest (api), Vitest + Testing Library (web), Playwright (e2e) | |
+| Test | Jest + supertest (be: unit + e2e trên DB `salmon_test`), Vitest (fe), Playwright (smoke) | Cách chạy: xem README |
 | CI/CD | GitHub Actions | Build, test, deploy |
 
 ---
@@ -77,14 +79,14 @@ flowchart LR
     CDN[CDN - CloudFront / Cloudflare]
   end
 
-  subgraph Web["apps/web - Next.js"]
+  subgraph Web["fe - Next.js"]
     PUB[Public pages<br/>SSG + ISR]
     ADM[Admin pages<br/>CSR - /admin]
     RV[/api/revalidate/]
     FEED[rss.xml / sitemap.xml / og]
   end
 
-  subgraph Api["apps/api - NestJS"]
+  subgraph Api["be - NestJS"]
     PC[Public controllers]
     AC[Admin controllers + Guards]
     SVC[Services]
@@ -114,65 +116,66 @@ flowchart LR
 
 ## 4. Cấu trúc thư mục (monorepo)
 
+Ký hiệu: ✅ đã có · ⏳ chưa làm (giai đoạn sau).
+
 ```
-blog/
-├─ apps/
-│  ├─ web/                          # Next.js
-│  │  ├─ src/
-│  │  │  ├─ app/
-│  │  │  │  ├─ (site)/
-│  │  │  │  │  ├─ layout.tsx       # header, footer, nav
-│  │  │  │  │  ├─ page.tsx         # Trang chủ
-│  │  │  │  │  ├─ posts/
-│  │  │  │  │  │  ├─ page.tsx      # Danh sách theo năm
-│  │  │  │  │  │  └─ [slug]/page.tsx
-│  │  │  │  │  ├─ notes/
-│  │  │  │  │  │  ├─ page.tsx      # Timeline + lọc năm/tháng
-│  │  │  │  │  │  └─ [slug]/page.tsx
-│  │  │  │  │  ├─ infographic/
-│  │  │  │  │  │  ├─ page.tsx
-│  │  │  │  │  │  └─ [slug]/page.tsx
-│  │  │  │  │  ├─ series/[slug]/page.tsx
-│  │  │  │  │  └─ about/page.tsx
-│  │  │  │  ├─ admin/               # CSR, noindex
-│  │  │  │  │  ├─ login/page.tsx
-│  │  │  │  │  ├─ posts/ notes/ infographics/ series/ media/
-│  │  │  │  ├─ api/revalidate/route.ts
-│  │  │  │  ├─ rss.xml/route.ts     # hoặc index.xml để giữ URL cũ
-│  │  │  │  ├─ sitemap.ts
-│  │  │  │  └─ robots.ts
-│  │  │  ├─ components/
-│  │  │  │  ├─ layout/ (Header, Footer, Nav)
-│  │  │  │  ├─ content/ (PostCard, NoteCard, InfographicCard, Markdown, TOC)
-│  │  │  │  └─ admin/ (Editor, MediaPicker, DataTable)
-│  │  │  ├─ components/content/WidgetFrame.tsx   # iframe sandbox (mục 9)
-│  │  │  ├─ lib/ (api-client.ts, markdown.ts, seo.ts, reading-time.ts)
-│  │  │  └─ middleware.ts           # bảo vệ /admin
-│  │  └─ next.config.ts
-│  └─ api/                          # NestJS
-│     └─ src/
-│        ├─ main.ts
-│        ├─ app.module.ts
-│        ├─ common/ (guards, filters, interceptors, pipes, decorators)
-│        ├─ config/
-│        ├─ prisma/
-│        └─ modules/
-│           ├─ auth/
-│           ├─ posts/
-│           ├─ notes/
-│           ├─ widgets/             # upload, kiểm tra, inject script (mục 9)
-│           ├─ series/
-│           ├─ taxonomy/            # category + tag
-│           ├─ pages/               # about...
-│           ├─ media/
-│           ├─ feed/                # dữ liệu cho RSS/sitemap
-│           ├─ search/
-│           └─ revalidate/          # gọi webhook sang Next
+SalmonLab/
+├─ fe/                                # Next.js (package @salmon/fe)
+│  ├─ src/
+│  │  ├─ app/
+│  │  │  ├─ layout.tsx                # ✅ font Lora, <html lang="vi">
+│  │  │  ├─ globals.css               # ✅ Tailwind v4 + @theme + .prose-salmon
+│  │  │  ├─ (site)/
+│  │  │  │  ├─ layout.tsx             # ✅ header, footer, metadata mặc định
+│  │  │  │  ├─ page.tsx               # ✅ Trang chủ
+│  │  │  │  ├─ posts/ (page, [slug])  # ✅
+│  │  │  │  ├─ notes/ (page, [slug])  # ✅
+│  │  │  │  ├─ infographic/ (page, [slug])  # ✅ cơ bản (chưa có widget)
+│  │  │  │  ├─ series/[slug]/page.tsx # ✅
+│  │  │  │  ├─ about/page.tsx         # ✅
+│  │  │  │  └─ not-found.tsx          # ✅
+│  │  │  ├─ admin/                    # ✅ CSR, noindex: login + (panel)/ dashboard, posts, notes, series, taxonomy, pages
+│  │  │  ├─ api/revalidate/route.ts   # ✅
+│  │  │  ├─ rss.xml/route.ts          # ✅ (+ rewrite /index.xml → /rss.xml)
+│  │  │  └─ sitemap.ts, robots.ts     # ✅
+│  │  ├─ components/
+│  │  │  ├─ layout/                   # ✅ Header, NavLinks, Footer
+│  │  │  ├─ content/                  # ✅ Article, Prose, Toc, PostRow, PostsExplorer,
+│  │  │  │                            #    NoteCard/NoteSnippet, NoteFilter, SegmentedPill,
+│  │  │  │                            #    FeaturedStrip, SectionHeading, ArticleMeta, JsonLd
+│  │  │  │                            # ⏳ WidgetFrame (GĐ3)
+│  │  ├─ admin/                       # ✅ code client của admin: lib/ (api, auth, hooks, toast), components/ (AdminShell,
+│  │  │                               #    PostEditor, MarkdownEditor, TagInput, ui) — ⏳ MediaPicker
+│  │  ├─ app/api/admin/preview/route.ts  # ✅ xem trước Markdown bằng đúng pipeline public
+│  │  ├─ lib/                         # ✅ api-client, markdown, seo, format, env, types
+│  │  └─ styles/tokens.css            # ✅ design tokens (mục 7.6)
+│  ├─ e2e/smoke.spec.ts               # ✅ Playwright
+│  └─ next.config.ts
+├─ be/                                # NestJS (package @salmon/be)
+│  ├─ prisma/                         # ✅ schema.prisma, migrations/, seed.ts
+│  ├─ src/
+│  │  ├─ main.ts, app.setup.ts        # ✅ app.setup.ts dùng chung cho server và e2e
+│  │  ├─ app.module.ts
+│  │  ├─ common/                      # ✅ filters, pipes (zod), errors, serializers,
+│  │  │                               #    events, public (lọc nội dung công khai), utils/
+│  │  ├─ config/env.ts                # ✅ validate env bằng zod
+│  │  ├─ prisma/                      # ✅ PrismaModule (global)
+│  │  ├─ auth/                        # ✅ login/refresh/logout/me, JwtAuthGuard, AdminController
+│  │  ├─ health/                      # ✅ /health (terminus)
+│  │  └─ modules/
+│  │     ├─ site/ home/ posts/ notes/ series/ pages/ taxonomy/ feed/   # ✅ API public
+│  │     ├─ admin/                    # ✅ CRUD: posts, notes, series, categories, tags, pages
+│  │     ├─ revalidate/               # ✅ listener sự kiện → webhook sang Next
+│  │     ├─ widgets/                  # ⏳ GĐ3
+│  │     ├─ media/                    # ⏳ GĐ2
+│  │     └─ search/                   # ⏳ GĐ5
+│  └─ test/                           # ✅ e2e (public, auth, admin, throttle)
 ├─ packages/
-│  ├─ shared/                       # DTO, zod schema, enum, type dùng chung
-│  └─ config/                       # eslint, tsconfig, prettier base
-├─ infra/                           # docker-compose, terraform (tùy chọn)
-├─ .github/workflows/
+│  ├─ shared/                         # ✅ enum + zod schema + type dùng chung (@salmon/shared)
+│  └─ config/                         # ✅ tsconfig.base.json (@salmon/config)
+├─ infra/docker-compose.yml           # ✅ Postgres 16 + RustFS (kho S3 dev; API tự tạo bucket)
+├─ docs/ARCHITECTURE.md
+├─ .github/workflows/                 # ⏳
 ├─ turbo.json
 └─ pnpm-workspace.yaml
 ```
@@ -332,9 +335,10 @@ Lỗi: `{ "error": { "code": "POST_NOT_FOUND", "message": "..." } }`.
 |---|---|---|
 | GET | `/site` | Tên site ("Salmon Lab"), tagline, ảnh cover, link nav, social |
 | GET | `/home` | Gộp: featured + 10 bài gần nhất + 3 ghi chú gần nhất (giảm round-trip) |
-| GET | `/posts` | Query: `page,pageSize,category,tag,year,q` |
-| GET | `/posts/:slug` | Chi tiết + bài trước/sau + series liên quan |
-| GET | `/notes` | Query: `page,year,month,tag` |
+| GET | `/posts` | Query: `page,pageSize,category,tag,year,q,kind,fields`. `kind` mặc định `post` (infographic không lẫn vào danh sách bài viết); `fields=slug` chỉ trả slug (dùng cho `generateStaticParams`); `q` hiện chỉ tìm theo tiêu đề/excerpt. Danh sách **không** trả `bodyMd` |
+| GET | `/posts/:slug` | Chi tiết (chỉ bài thường; infographic ở `/infographics/:slug`) + bài trước/sau cùng loại + các bài cùng series |
+| GET | `/notes` | Query: `page,pageSize,year,month,tag` (năm/tháng tính theo giờ Việt Nam, UTC+7; `month` không kèm `year` thì bị bỏ qua) |
+| GET | `/notes/archive` | Các năm/tháng có ghi chú công khai, dùng cho bộ lọc: `[{ year, months: [10, 9] }]` |
 | GET | `/notes/:slug` | Chi tiết ghi chú |
 | GET | `/infographics` · `/infographics/:slug` | Bí danh của `/posts?kind=infographic` |
 | GET | `/series/:slug` | Thông tin series + danh sách mục theo `seriesOrder` |
@@ -343,20 +347,24 @@ Lỗi: `{ "error": { "code": "POST_NOT_FOUND", "message": "..." } }`.
 | GET | `/search?q=` | Tìm kiếm (giai đoạn 3) |
 | GET | `/feed/rss` · `/feed/sitemap` | Dữ liệu cho RSS/sitemap (JSON, web tự render XML) |
 
-### 6.2 Admin (JWT, role `ADMIN`)
+### 6.2 Admin (JWT)
+
+Chỉ có một tác giả nên chưa có cột `role`/`RolesGuard`; mọi route `/admin/*` dùng decorator `@AdminController(path)` (đã gắn `JwtAuthGuard`) để không thể quên bảo vệ. Ngoài ra có `GET /health` (kiểm tra DB) và Swagger ở `/api/docs`.
 
 | Method | Path | Mô tả |
 |---|---|---|
 | POST | `/auth/login` · `/auth/refresh` · `/auth/logout` | Phát/đổi/hủy token |
 | GET | `/auth/me` | Thông tin admin |
-| CRUD | `/admin/posts` | + `POST /:id/publish`, `/unpublish`, `/schedule` |
-| CRUD | `/admin/notes` | Tạo nhanh (chỉ cần `bodyMd`) |
+| CRUD | `/admin/posts` | `GET` liệt kê cả bản nháp (lọc `status,kind,q`); `POST /:id/publish`, `/unpublish`, `/schedule {publishedAt}`. Tạo mới luôn là `DRAFT`; không đổi `status` qua PATCH. Slug đã publish thì không đổi được (`SLUG_IMMUTABLE`) |
+| CRUD | `/admin/notes` | Tạo nhanh chỉ cần `bodyMd` (`publish: true` để đăng luôn) + `publish`/`unpublish`/`schedule` như post |
 | POST | `/admin/posts/import` | Dùng chung cho post/note/infographic (`.md` hoặc `.zip`), xem 8.3 và 9 |
 | CRUD | `/admin/series` | + sắp xếp mục (`PUT /:id/order`) |
 | CRUD | `/admin/categories`, `/admin/tags` | |
-| PUT | `/admin/pages/:slug` | Sửa About |
+| PUT | `/admin/pages/:slug` | Sửa About (upsert) |
+| GET | `/admin/pages` | Liệt kê trang tĩnh |
 | POST | `/admin/media/presign` | Lấy presigned URL upload thẳng lên R2 (domain S3 API) |
 | POST | `/admin/media/confirm` | Ghi `Media` sau khi upload xong |
+| POST | `/admin/revalidate` | Làm mới cache Next thủ công; body rỗng = tất cả tag (dùng sau deploy), hoặc `{ "tags": [...] }` |
 
 ### 6.3 NestJS — các module & trách nhiệm
 
@@ -364,14 +372,18 @@ Lỗi: `{ "error": { "code": "POST_NOT_FOUND", "message": "..." } }`.
 PostsModule         → PostsController (public) + AdminPostsController
                       PostsService (CRUD, publish, tính reading time)
                       PostsRepository (Prisma)
-AuthModule          → JwtStrategy, LocalStrategy, RolesGuard, RefreshToken
+AuthModule          → AuthService, JwtStrategy, JwtAuthGuard (+ @AdminController, @CurrentUser)
+                      refresh token xoay vòng, lưu hash SHA-256 (bảng RefreshToken);
+                      dùng lại token đã bị thu hồi => thu hồi toàn bộ token của user
 MediaModule         → R2Service (put, presign, delete), ImageProcessor (sharp: resize/webp)
 RevalidateModule    → RevalidateService.trigger(tags[]) → HTTP POST sang Next
 EventsModule        → EventEmitter2: 'post.published' → revalidate
 ```
 
-**Sự kiện publish** (`post.published`, `note.published`, `infographic.published`):
-1. `RevalidateService` gọi Next để làm mới cache (`posts`, `home`, `feed`, `post:<slug>`...).
+**Sự kiện** (`EventEmitter2`, tên ở `be/src/common/events.ts`): `post.published`, `post.updated`, `note.published`, `note.updated`, `series.updated`, `page.updated`, `taxonomy.updated`. Publish/sửa/gỡ/xoá nội dung đã công khai đều phát sự kiện; tạo bản nháp hoặc hẹn giờ thì không.
+1. `RevalidateListener` đổi sự kiện thành cache tag (`be/src/modules/revalidate/revalidate.tags.ts`): bài → `posts`, `post:<slug>`, `home`, `feed`, `series`; ghi chú → `notes`, `note:<slug>`, `home`, `feed`; series → `series`, `series:<slug>`, `home`; trang tĩnh → `page:<slug>`, `feed`; taxonomy → `posts`, `notes`, `infographics`, `home`.
+2. `RevalidateService` gom các tag trong 150ms, gửi **một** `POST` kèm `x-revalidate-secret`, thử lại tối đa 3 lần (không thử lại khi 401) và **không bao giờ ném lỗi** — nội dung đã lưu, TTL fallback 1 giờ phía Next giới hạn độ trễ nếu lỡ mất một lần.
+3. Hạn chế đã biết: bài **hẹn giờ** chưa tự làm mới đúng lúc đến giờ (chưa có job định kỳ), chậm nhất sau 1 giờ nhờ TTL.
 
 ---
 
@@ -399,20 +411,16 @@ EventsModule        → EventEmitter2: 'post.published' → revalidate
 ### 7.2 Gọi API & cache
 
 ```ts
-// apps/web/src/lib/api-client.ts
-const API = process.env.API_INTERNAL_URL!;
-
-export async function api<T>(path: string, opts: { tags?: string[]; revalidate?: number } = {}) {
-  const res = await fetch(`${API}${path}`, {
-    next: { tags: opts.tags, revalidate: opts.revalidate ?? 3600 }, // fallback 1h
-  });
-  if (!res.ok) throw new Error(`API ${res.status} ${path}`);
-  return (await res.json()) as T;
+// fe/src/lib/api-client.ts (rút gọn; bản thật có thêm ApiError và apiOrNotFound → notFound())
+export async function api<T>(path: string, { tags, revalidate = 3600 }: Options = {}): Promise<ApiOk<T>> {
+  const res = await fetch(`${API_URL}${path}`, { next: { tags, revalidate } }); // fallback 1h
+  if (!res.ok) throw new ApiError(res.status, path);
+  return (await res.json()) as ApiOk<T>; // { data, meta? }
 }
 ```
 
 ```ts
-// apps/web/src/app/(site)/posts/[slug]/page.tsx
+// fe/src/app/(site)/posts/[slug]/page.tsx
 export async function generateStaticParams() {
   const { data } = await api<{ data: { slug: string }[] }>('/posts?pageSize=1000&fields=slug', { tags: ['posts'] });
   return data.map(p => ({ slug: p.slug }));
@@ -426,7 +434,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 ```
 
 ```ts
-// apps/web/src/app/api/revalidate/route.ts
+// fe/src/app/api/revalidate/route.ts (bản thật so sánh secret bằng timingSafeEqual và trả 400 nếu thiếu tags)
 import { revalidateTag } from 'next/cache';
 export async function POST(req: Request) {
   if (req.headers.get('x-revalidate-secret') !== process.env.REVALIDATE_SECRET)
@@ -439,8 +447,10 @@ export async function POST(req: Request) {
 
 ### 7.3 Render Markdown
 
-Pipeline (chạy ở server component, kết quả cache theo tag):
-`remark-parse → remark-gfm → remark-footnotes → remark-rehype → rehype-slug → rehype-autolink-headings → rehype-external-links → @shikijs/rehype → rehype-stringify`.
+Pipeline (chạy ở server component, kết quả cache theo tag) — `fe/src/lib/markdown.ts`:
+`remark-parse → remark-gfm → remark-rehype → rehype-sanitize → @shikijs/rehype → rehype-slug → rehype-autolink-headings → rehype-external-links → (thu thập TOC) → rehype-stringify`.
+- `remark-gfm` đã bao gồm footnote nên không cần `remark-footnotes`.
+- `rehype-sanitize` chạy **trước** Shiki/slug để không xoá `id` và style do chính pipeline sinh ra. HTML thô trong Markdown **không** được render (không dùng `rehype-raw`).
 - Ảnh trong bài dùng `next/image` (loader trỏ CDN) hoặc `<img loading="lazy">` + `width/height` từ `Media`.
 - Trích TOC từ heading `h2/h3` để hiển thị mục lục.
 - Chống XSS: dùng `rehype-sanitize` với allow-list (đặc biệt vì có thể có HTML nhúng).
@@ -468,7 +478,7 @@ Pipeline (chạy ở server component, kết quả cache theo tag):
 #### a) Design tokens
 
 ```css
-/* apps/web/src/styles/tokens.css */
+/* fe/src/styles/tokens.css */
 :root {
   /* Màu (lấy mẫu từ ảnh) */
   --bg:            #ffffff;  /* nền trang */
@@ -501,7 +511,7 @@ Pipeline (chạy ở server component, kết quả cache theo tag):
 Chữ trong ảnh là serif có nét thanh–đậm vừa phải, chữ đậm rõ ở tiêu đề, chữ nghiêng cho mô tả — rất khớp với **Lora** (hỗ trợ tiếng Việt đầy đủ). Cần xác nhận lại.
 
 ```ts
-// apps/web/src/app/layout.tsx
+// fe/src/app/layout.tsx
 import { Lora } from 'next/font/google';
 
 const lora = Lora({
@@ -541,25 +551,25 @@ const lora = Lora({
 - **Footer:** đường kẻ `--border`, dòng bản quyền căn giữa, `--muted`.
 - **Ảnh cover infographic** là ảnh được thiết kế riêng (tông kem–nâu–cam, có nhãn chữ mono như `BACK TO BASICS · #002`). Khi nhờ AI sinh hoạt ảnh và ảnh cover, hãy yêu cầu **đúng bảng màu trên** để đồng bộ với giao diện.
 
-#### d) Nối vào Tailwind
+#### d) Nối vào Tailwind (v4: cấu hình bằng CSS)
 
-```ts
-// tailwind.config.ts
-export default {
-  theme: {
-    extend: {
-      colors: {
-        bg: 'var(--bg)', surface: 'var(--surface)', 'surface-note': 'var(--surface-note)',
-        fg: 'var(--fg)', muted: 'var(--muted)', accent: 'var(--accent)',
-        'accent-hover': 'var(--accent-hover)', highlight: 'var(--highlight)', border: 'var(--border)',
-      },
-      fontFamily: { serif: ['var(--font-serif)'], mono: ['var(--font-mono)'] },
-      maxWidth: { measure: 'var(--measure)' },
-    },
-  },
-};
+```css
+/* fe/src/app/globals.css */
+@import 'tailwindcss';
+@import '../styles/tokens.css';
+@plugin '@tailwindcss/typography';
+
+@theme inline {
+  --color-bg: var(--bg);               --color-surface: var(--surface);
+  --color-surface-note: var(--surface-note);
+  --color-fg: var(--fg);               --color-muted: var(--muted);
+  --color-accent: var(--accent);       --color-accent-hover: var(--accent-hover);
+  --color-highlight: var(--highlight); --color-border: var(--border);
+  --font-serif: var(--font-serif);     --font-mono: var(--font-mono);
+  --container-measure: var(--measure);
+}
 ```
-Mọi component chỉ dùng token (`text-accent`, `border-border`, `bg-surface`...), không viết cứng mã màu. Các biến `--bg/--fg/--accent/--muted/--border` này cũng chính là biến mà widget hoạt ảnh ở mục 9.4 nhận, nên hoạt ảnh sẽ tự khớp giao diện.
+Mọi component chỉ dùng token (`text-accent`, `border-border`, `bg-surface`, `max-w-measure`...), không viết cứng mã màu. Nội dung bài viết dùng lớp `.prose-salmon` (gắn các biến `--tw-prose-*` vào token). Các biến `--bg/--fg/--accent/--muted/--border` này cũng chính là biến mà widget hoạt ảnh ở mục 9.4 nhận, nên hoạt ảnh sẽ tự khớp giao diện.
 
 #### e) Xác nhận lại font bằng DevTools (2 phút)
 Mở site mẫu → chuột phải vào một đoạn chữ → **Inspect** → tab **Computed** → xem `font-family` (và tab Network → lọc *Font* để biết tên file). Nếu không phải Lora, thay giá trị `Lora` ở mục b) và `--font-serif` ở mục a). Cũng nên đối chiếu `font-size` và `line-height` thật để thay cho các số "ước lượng" ở trên.
@@ -754,7 +764,7 @@ Yêu cầu:
 
 ### 9.7 Thay đổi so với các mục trước
 
-- **Bỏ** model `Infographic`, enum `InfographicMode`, endpoint `/admin/infographics`, thư mục `apps/web/src/infographics/` và `registry.ts`.
+- **Bỏ** model `Infographic`, enum `InfographicMode`, endpoint `/admin/infographics`, thư mục `fe/src/infographics/` và `registry.ts`.
 - **Thêm** `Post.kind` (`POST | INFOGRAPHIC`) và bảng `Widget` (xem schema mục 5).
 - `GET /infographics` = `GET /posts?kind=infographic`; route `/infographic` và `/infographic/[slug]` dùng chung component `Article` với `/posts/[slug]`, chỉ khác bố cục (rộng hơn) và có `WidgetFrame`.
 
@@ -806,7 +816,7 @@ Browser → `POST /admin/media/presign` → API trả URL ký sẵn → Browser 
 > **Lưu ý quan trọng:** presigned URL của R2 chỉ hoạt động với domain S3 API (`<ACCOUNT_ID>.r2.cloudflarestorage.com`), **không dùng được với custom domain**. Vì vậy: *upload* qua domain S3 API, còn *đọc* công khai qua custom domain. Nếu gọi từ trình duyệt phải cấu hình CORS cho bucket (origin = domain admin, method = `PUT`, header = `Content-Type`), nếu không upload sẽ bị chặn dù URL hợp lệ. Presigned URL là bearer token: đặt thời hạn ngắn (vài phút), khóa theo key và `Content-Type`.
 
 ```ts
-// apps/api/src/modules/media/r2.service.ts
+// be/src/modules/media/r2.service.ts
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -929,67 +939,73 @@ Phù hợp để bắt đầu, chi phí thấp, dễ debug.
 5. Preview environment cho mỗi PR (tùy chọn).
 
 ### Biến môi trường chính
+Mẫu đầy đủ ở `be/.env.example` và `fe/.env.example` (copy thành `be/.env`, `fe/.env.local`).
 ```
-# api
-DATABASE_URL=
+# be
+PORT=4000
+DATABASE_URL=postgresql://salmon:salmon@localhost:5432/salmon
 JWT_ACCESS_SECRET= JWT_REFRESH_SECRET=
+WEB_BASE_URL=http://localhost:3000                       # CORS + link
+WEB_REVALIDATE_URL=http://localhost:3000/api/revalidate
+REVALIDATE_SECRET=                                       # phải trùng với fe
+SITE_NAME="Salmon Lab"                                   # tuỳ chọn, có mặc định
+SITE_TAGLINE="Những ghi chép về lập trình máy tính, các hệ thống phân tán và điện toán đám mây, AI và học máy"
+SITE_COVER_URL=                                          # tuỳ chọn
+SEED_ADMIN_EMAIL= SEED_ADMIN_PASSWORD=                   # chỉ cho `db:seed`
+# Lưu file (dev: RustFS qua S3_ENDPOINT; prod: Cloudflare R2, đặt R2_ACCOUNT_ID)
 R2_ACCOUNT_ID= R2_ACCESS_KEY_ID= R2_SECRET_ACCESS_KEY=
 R2_BUCKET_MEDIA=blog-media R2_BUCKET_WIDGETS=blog-widgets R2_BUCKET_PRIVATE=blog-private
 R2_PUBLIC_MEDIA_URL=https://media.example.com
 R2_PUBLIC_WIDGETS_URL=https://static.example.com
-WEB_BASE_URL=https://example.com
-WEB_REVALIDATE_URL=https://example.com/api/revalidate
-REVALIDATE_SECRET=
 
-# web
-NEXT_PUBLIC_SITE_NAME="Salmon Lab"
-NEXT_PUBLIC_SITE_TAGLINE="Những ghi chép về lập trình máy tính, các hệ thống phân tán và điện toán đám mây, AI và học máy"
-NEXT_PUBLIC_SITE_URL=
-API_INTERNAL_URL=http://api:4000/api/v1
-NEXT_PUBLIC_API_URL=https://api.example.com/api/v1   # cho admin (CSR)
+# fe
+API_INTERNAL_URL=http://localhost:4000/api/v1            # Docker: http://api:4000/api/v1
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 REVALIDATE_SECRET=
+# GĐ2 (admin CSR): NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
 ```
+Tên, tagline và nav của site do API trả về ở `GET /site`, nên web không cần biến `NEXT_PUBLIC_SITE_NAME/TAGLINE`.
 
 ---
 
 ## 14. Lộ trình implement (checklist)
 
 ### Giai đoạn 0 — Khởi tạo (0.5–1 ngày)
-- [ ] Tạo monorepo pnpm + Turborepo, config TS/ESLint/Prettier dùng chung
-- [ ] `docker-compose` cho Postgres (dev)
-- [ ] Thiết lập Cloudflare R2: 3 bucket, API token, custom domain (mục 10.7)
-- [ ] Scaffold `apps/api` (NestJS) và `apps/web` (Next.js + Tailwind)
-- [ ] `packages/shared`: enum, zod schema, type
+- [x] Tạo monorepo pnpm + Turborepo, config TS/Prettier dùng chung (ESLint do mỗi app dùng cấu hình của scaffold)
+- [x] `docker-compose` cho Postgres + kho S3 cục bộ (dev; RustFS thay MinIO vì image MinIO không còn trên Docker Hub)
+- [ ] Thiết lập Cloudflare R2 thật: 3 bucket, API token, custom domain (mục 10.7, hướng dẫn ở `docs/DEPLOY.md`) — việc của bạn khi deploy; code đã sẵn sàng, dev dùng kho S3 cục bộ
+- [x] Scaffold `be` (NestJS) và `fe` (Next.js + Tailwind)
+- [x] `packages/shared`: enum, zod schema, type
 
 ### Giai đoạn 1 — Lõi nội dung (3–5 ngày)
-- [ ] Prisma schema + migration + seed (admin, category `KHCN`/`Khác`, vài bài mẫu)
-- [ ] `AuthModule` (login/refresh/logout, guard)
-- [ ] CRUD Posts/Notes/Series/Taxonomy (admin) + endpoint public tương ứng
-- [ ] Tính `wordCount/readingMins`, slugify tiếng Việt, slug Note timestamp-hex
-- [ ] Web: layout, Trang chủ, `/posts`, `/posts/[slug]`, `/notes`, `/notes/[slug]`, `/about`
-- [ ] Markdown pipeline + Shiki + TOC
-- [ ] SEO: metadata, sitemap, robots, RSS
+- [x] Prisma schema + migration + seed (admin, category `KHCN`/`Khác`, vài bài mẫu)
+- [x] `AuthModule` (login/refresh/logout, guard)
+- [x] CRUD Posts/Notes/Series/Taxonomy (admin) + endpoint public tương ứng
+- [x] Tính `wordCount/readingMins`, slugify tiếng Việt, slug Note timestamp-hex
+- [x] Web: layout, Trang chủ, `/posts`, `/posts/[slug]`, `/notes`, `/notes/[slug]`, `/about`
+- [x] Markdown pipeline + Shiki + TOC
+- [x] SEO: metadata, sitemap, robots, RSS
 
 ### Giai đoạn 2 — Admin & media (3–4 ngày)
-- [ ] Admin UI: login, bảng danh sách, editor Markdown + preview
-- [ ] Media: presigned upload, MediaPicker, paste ảnh
-- [ ] Publish/Unpublish/Schedule + sự kiện `*.published`
-- [ ] Webhook revalidate Next ↔ API
+- [x] Admin UI: login, bảng danh sách, editor Markdown + preview (cả ghi chú, series, danh mục/thẻ, trang About, dashboard)
+- [x] Media: upload qua API (`POST /admin/media`), MediaPicker, dán/kéo-thả ảnh, thư viện ảnh, chọn ảnh bìa
+- [x] Publish/Unpublish/Schedule + sự kiện `*.published`
+- [x] Webhook revalidate Next ↔ API
 
 ### Giai đoạn 3 — Infographic & Series (2–3 ngày)
-- [ ] `Post.kind = INFOGRAPHIC`, bảng `Widget`, `WidgetFrame`, trang `/infographic` và `/infographic/[slug]`
-- [ ] Import `.zip` có `::widget`, inject script resize/theme, preview widget
-- [ ] Domain tĩnh riêng + CSP + kiểm tra widget khi import; 1 infographic mẫu
-- [ ] Trang `/series/[slug]`, mục **Nổi bật** ở trang chủ
+- [x] `Post.kind = INFOGRAPHIC`, bảng `Widget`, `WidgetRuntime` (iframe sandbox), trang `/infographic` và `/infographic/[slug]`
+- [x] Import `.zip` có `::widget`, inject script resize/theme, preview widget trong editor
+- [x] CSP (thẻ `<meta>` tiêm vào widget) + kiểm tra widget khi import; [ ] domain tĩnh riêng (cấu hình khi deploy, `docs/DEPLOY.md`); [ ] 1 infographic mẫu
+- [x] Trang `/series/[slug]`, mục **Nổi bật** ở trang chủ (đã làm sớm ở GĐ1)
 
 ### Giai đoạn 4 — Hoàn thiện (1–2 ngày)
-- [ ] Rate limit, helmet, CSP
-- [ ] Sentry, health check, logging
+- [x] Rate limit (login, search, import), khoá tài khoản sau 10 lần sai, helmet (API), CSP + header bảo mật (web)
+- [x] Sentry phía API (bật bằng `SENTRY_DSN`), health check, logging; [ ] Sentry phía web
 
 ### Giai đoạn 5 — Nâng cao (tùy chọn)
-- [ ] Tìm kiếm (Postgres FTS `unaccent` hoặc Meilisearch)
-- [ ] OG image động, dark mode, bài liên quan
-- [ ] Import nội dung cũ (script đọc Markdown từ Hugo → DB, giữ nguyên slug)
+- [x] Tìm kiếm (Postgres FTS + `unaccent`)
+- [x] OG image động, dark mode; [ ] bài liên quan
+- [x] Import nội dung cũ: `pnpm --filter @salmon/be import:hugo` (front matter TOML/YAML, giữ slug và ngày gốc)
 - [ ] Thống kê lượt xem (Plausible/Umami thay vì tự build)
 
 ---
@@ -1010,6 +1026,71 @@ REVALIDATE_SECRET=
 1. **Admin**: giả định chỉ có 1 tác giả. Nếu cần nhiều tác giả → thêm `role` và quan hệ tác giả đã có sẵn trong schema.
 2. **Hosting**: chưa chốt VPS hay AWS/Vercel; kiến trúc không phụ thuộc nhà cung cấp.
 3. **Infographic**: đã chốt là bài post chứa widget HTML do AI sinh, up bằng `.zip` (mục 9).
-4. **Migrate nội dung** từ site gốc/Hugo có cần không? Nếu có, nên giữ nguyên slug và URL để bảo toàn SEO.
+4. **Migrate nội dung** từ site gốc/Hugo có cần không? *(chưa quyết)* Nếu có, nên giữ nguyên slug và URL để bảo toàn SEO.
 5. **Sách / "Books"**: bài viết gốc nhắc hệ thống quản trị có "sách" nhưng website public hiện chưa có mục này — để ngỏ, có thể thêm model `Book` sau.
 6. **Giao diện**: tài liệu này tập trung kiến trúc; nếu cần, có thể bổ sung design system (màu, typography, spacing) bám theo site gốc.
+
+---
+
+## 17. Ghi chú triển khai (khác với bản thiết kế ban đầu)
+
+Cập nhật sau Giai đoạn 0–1. Những điểm dưới đây là **quyết định đã chốt**, ưu tiên hơn nội dung cũ ở các mục trên nếu có mâu thuẫn.
+
+**Cấu trúc & công cụ**
+- Thư mục là `be/` và `fe/` (không phải `apps/api`, `apps/web`); workspace vẫn là pnpm + Turborepo, có `packages/shared` và `packages/config`.
+- Prisma ghim `^6`; Tailwind v4 (cấu hình bằng CSS); Node ≥ 22.12 (một số gói `@nestjs/*` là ESM).
+- Dev dùng RustFS (kho S3 cục bộ, cổng 9000) thay vì R2 thật; code chỉ nói S3 API nên đổi sang R2 chỉ cần đặt `R2_ACCOUNT_ID`.
+- `be/tsconfig.json` bật `strictNullChecks` (zod suy luận kiểu sai nếu tắt).
+
+**API**
+- `/posts` mặc định chỉ trả bài thường (`kind=post`); `/home` cũng chỉ lấy bài thường. Infographic có endpoint riêng, tránh một nội dung xuất hiện ở hai URL.
+- Thêm `GET /notes/archive`, `POST /admin/revalidate`, `GET /health`.
+- Lỗi thống nhất `{ error: { code, message } }`; lỗi Prisma được ánh xạ: unique → 409 `CONFLICT`, khoá ngoại sai → 400 `INVALID_REFERENCE`, không thấy → 404.
+- Xác thực: không có `RolesGuard` (một tác giả); đăng nhập giới hạn 5 lần/phút; email không tồn tại và mật khẩu sai trả cùng một lỗi.
+- Đổi slug sau khi publish được phép: API lưu `SlugRedirect` (không tạo chuỗi, dùng lại slug cũ sẽ xoá redirect) và web trả 308 từ URL cũ sang URL mới.
+
+**Frontend**
+- `/posts` là trang tĩnh: tải toàn bộ danh sách rồi lọc category phía client. `/notes` dùng `searchParams` (render theo yêu cầu, dữ liệu vẫn cache theo tag).
+- Series dùng cả tag `series` lẫn `series:<slug>` (sự kiện của một bài không mang slug series).
+- `lib/reading-time.ts` không cần: API đã tính `wordCount/readingMins`.
+- Build `fe` cần API đang chạy (trang tĩnh lấy dữ liệu lúc build); riêng `generateStaticParams` có bắt lỗi để không làm hỏng build.
+- `/infographic` và `/infographic/[slug]` đã có bản cơ bản, render như bài thường; widget iframe làm ở GĐ3.
+
+**Admin UI** (`fe/src/admin`, route `fe/src/app/admin`)
+- Toàn bộ chạy phía client (CSR) và gọi thẳng API bằng `NEXT_PUBLIC_API_URL`; `noindex` qua metadata và `robots.txt` chặn `/admin`.
+- Access token chỉ giữ trong bộ nhớ; refresh token là cookie httpOnly do API đặt. Khi tải trang, client gọi `/auth/refresh` để khôi phục phiên. Refresh token xoay vòng và dùng lại token cũ sẽ thu hồi cả phiên, nên mọi lệnh refresh đồng thời phải dùng chung **một** request đang bay (`refreshSession()` trong `admin/lib/api.ts`) — đừng gọi `/auth/refresh` ở chỗ khác.
+- **Khác thiết kế (mục 8.4):** không dùng `middleware.ts` để bảo vệ `/admin`, vì cookie refresh có `Path=/api/v1/auth` nên middleware của Next không đọc được. Việc chặn làm ở client (`AuthProvider` chuyển về `/admin/login?next=…`); dữ liệu vẫn được API bảo vệ bằng JWT.
+- Xem trước dùng `POST /api/admin/preview` (render phía server bằng `lib/markdown.ts`), yêu cầu Bearer token hợp lệ (xác minh qua API `/auth/me`) và giới hạn 500 KB.
+- Bản nháp tự lưu sau 10 giây; bài **đã xuất bản không tự lưu** (mỗi lần lưu đổi nội dung công khai và kích hoạt revalidate). Slug bị khoá sau khi xuất bản.
+- Xoá dùng nút xác nhận hai bước (không dùng `confirm()` của trình duyệt).
+- Giới hạn: ảnh bìa nhập URL (chưa có upload/MediaPicker, chưa dán ảnh); sắp xếp series bằng nút ↑/↓ (chưa kéo-thả); chưa có import `.md`/`.zip`; chưa gán thẻ cho ghi chú trong UI.
+
+**Cập nhật sau Giai đoạn 2–5 (ưu tiên hơn các mục 8–11 nếu mâu thuẫn)**
+
+*Media & import*
+- Upload ảnh đi **qua API** (`POST /admin/media`, multipart) thay vì presigned URL: server kiểm tra byte thật bằng `sharp` (không tin mime của client), thu nhỏ về 2400px, bỏ EXIF, từ chối SVG; tối đa 10 MB. Khoá `yyyy/mm/<uuid>.<ext>`, header `immutable`. Không tạo biến thể ảnh (chưa cần).
+- Import là **một bước**: `POST /admin/import` (`.md` hoặc `.zip`) luôn tạo **bản nháp** để xem lại trong editor, thay cho luồng `draftId` + commit. Xung đột slug: `rename` (mặc định) / `overwrite` / `reject`. Ngày `date` trong front matter được giữ và còn nguyên khi publish. Ảnh trong zip được tải lên thư viện và sửa đường dẫn.
+- `gray-matter` bị tắt engine JS (front matter `---js` chạy code). Zip chỉ đọc trong bộ nhớ, giới hạn 500 tệp / 60 MB giải nén, từ chối đường dẫn `..`.
+
+*Widget (mục 9)*
+- Cú pháp `::widget{src title height caption}` qua `remark-directive`; mọi directive khác được trả về dạng chữ gốc (nếu không `:abbr[x]` bị mất). Pipeline chỉ sinh `<figure class="widget" data-widget-*>`; **`WidgetRuntime`** (client) tạo iframe `sandbox="allow-scripts"` khi cuộn gần tới (trong preview admin thì mount ngay), nhận `widget-height`/`widget-ready` chỉ từ iframe của mình và gửi theme. Chỉ nhúng widget có `src` thuộc `WIDGETS_BASE_URL`.
+- CSP của widget được **tiêm bằng thẻ `<meta http-equiv>`** vào file (S3/R2 không lưu header CSP tuỳ ý), nên trình duyệt chặn mạng ngay cả khi chưa có domain tĩnh riêng. `frame-ancestors` không áp dụng được qua meta: đặt ở domain tĩnh (xem `docs/DEPLOY.md`). Kiểm tra khi upload chỉ là heuristic (regex); lớp bảo vệ thật là CSP + sandbox.
+- Upload lẻ: `POST /admin/posts/:id/widgets` (panel "Widget tương tác" trong editor, có prompt mẫu); import zip kiểm tra **tất cả** widget trước khi tạo bài. Xoá bài sẽ xoá cả file widget. Cache `max-age=300` (cùng key khi tải lại).
+- Chưa bắt buộc "đã xem preview mới được publish"; bố cục infographic chưa rộng hơn bài thường.
+
+*Tìm kiếm, vận hành, giao diện*
+- `GET /search?q&type&page`: Postgres FTS (`simple` + hàm `f_unaccent`/`search_doc`, index GIN, tiền tố khi gõ dở, ưu tiên khớp tiêu đề). Migration `…_search` tạo extension `unaccent`, `pg_trgm` và các hàm; Prisma không mô hình hoá chúng nên chỉ có trong SQL.
+- Cài đặt site (tên, tagline, ảnh bìa) sửa ở admin `/admin/settings`, lưu bảng `Setting`, ưu tiên hơn `SITE_*` trong env.
+- Job mỗi phút (`ScheduledPublishService`) phát sự kiện revalidate cho bài/ghi chú tới giờ hẹn.
+- Khoá tài khoản 15 phút sau 10 lần sai liên tiếp (đánh đổi: có thể bị khoá chủ động; giới hạn IP 5 lần/phút vẫn áp dụng). `LOGIN_RATE_LIMIT` chỉ để nâng giới hạn cho test tự động.
+- Dark mode: token `[data-theme='dark']`, script trong `<head>` đặt theme trước khi vẽ (ưu tiên lựa chọn đã lưu, rồi cài đặt hệ thống), Shiki hai theme, widget nhận theme qua postMessage.
+- OG image: route `/og/<posts|infographic>/<slug>` (`next/og`, font Lora từ `@fontsource/lora`); không dùng file convention `opengraph-image` vì Next bỏ qua nó khi trang tự khai báo `openGraph`.
+- Web gửi CSP (script cho phép `'unsafe-inline'` vì chưa dùng nonce), `X-Frame-Options`, `Referrer-Policy`…; API dùng helmet (trừ `/api/docs`).
+- `messages/vi.json` + `t()` mới dùng cho header, theme toggle và trang tìm kiếm; các chuỗi còn lại vẫn viết thẳng.
+- Triển khai: `be/Dockerfile`, `fe/Dockerfile`, `infra/docker-compose.prod.yml` (nginx, backup Postgres hằng ngày), `.github/workflows/{ci,deploy}.yml`. `next build` prerender từ API nên phải build web sau khi API chạy.
+
+**Chưa làm / còn thiếu**
+- Sentry phía web, thống kê lượt xem, bài liên quan, Terraform.
+- Đo Lighthouse (tiêu chí ở mục 15): chưa chạy được trong môi trường phát triển; hãy chạy trên bản deploy.
+- CI/CD và `docker-compose.prod.yml` mới được kiểm tra cú pháp (và build image API/web ở máy dev), chưa chạy thật trên GitHub Actions/VPS.
+- Chưa kiểm tra dán ảnh từ clipboard bằng trình duyệt thật (có test chọn ảnh qua picker và upload).
