@@ -1,0 +1,43 @@
+# Rendered by the nginx image from ${WEB_DOMAIN} / ${API_DOMAIN}. TLS certificates live in /etc/nginx/certs.
+server {
+  listen 80;
+  server_name ${WEB_DOMAIN} ${API_DOMAIN};
+  return 301 https://$host$request_uri;
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name ${WEB_DOMAIN};
+  ssl_certificate /etc/nginx/certs/fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/privkey.pem;
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml application/xml;
+  client_max_body_size 1m;
+
+  # The revalidate hook is called by the API over the internal network only.
+  location = /api/revalidate { return 404; }
+
+  location / {
+    proxy_pass http://web:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+}
+
+server {
+  listen 443 ssl;
+  http2 on;
+  server_name ${API_DOMAIN};
+  ssl_certificate /etc/nginx/certs/fullchain.pem;
+  ssl_certificate_key /etc/nginx/certs/privkey.pem;
+  client_max_body_size 25m; # media (10 MB) and import (20 MB) uploads
+
+  location / {
+    proxy_pass http://api:4000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+}

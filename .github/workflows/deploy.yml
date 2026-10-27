@@ -1,0 +1,39 @@
+name: Deploy
+
+# Runs after CI succeeds on main (or by hand). Needs repository secrets:
+#   DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY, DEPLOY_PATH (checkout of this repo on the server, with infra/.env.prod)
+on:
+  workflow_run:
+    workflows: [CI]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency: deploy-production
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy over SSH
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          TARGET: ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}
+          DIR: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$TARGET" "bash -s" <<SCRIPT
+          set -euo pipefail
+          cd "$DIR"
+          git fetch origin main && git reset --hard origin/main
+          C="docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod"
+          # API first (it applies migrations on boot); the web image prerenders from it, then is swapped in.
+          \$C up -d --build postgres api
+          for i in \$(seq 1 30); do curl -sf http://127.0.0.1:4000/api/v1/health >/dev/null && break; sleep 2; done
+          \$C build web
+          \$C up -d web nginx backup
+          docker image prune -f
+          SCRIPT
