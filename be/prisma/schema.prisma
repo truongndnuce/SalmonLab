@@ -1,0 +1,192 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PostKind {
+  POST
+  INFOGRAPHIC
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  displayName   String
+  avatarUrl     String?
+  failedLogins  Int            @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime       @default(now())
+  posts         Post[]
+  notes         Note[]
+  refreshTokens RefreshToken[]
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Category {
+  id    String @id @default(cuid())
+  slug  String @unique
+  name  String
+  posts Post[]
+  notes Note[]
+}
+
+model Tag {
+  id    String    @id @default(cuid())
+  slug  String    @unique
+  name  String
+  posts PostTag[]
+  notes NoteTag[]
+}
+
+model Series {
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  title         String
+  description   String?
+  coverUrl      String?
+  featured      Boolean  @default(false)
+  featuredOrder Int?
+  posts         Post[]
+  createdAt     DateTime @default(now())
+}
+
+model Post {
+  id          String        @id @default(cuid())
+  kind        PostKind      @default(POST)
+  slug        String        @unique
+  title       String
+  excerpt     String?
+  bodyMd      String
+  coverUrl    String?
+  coverAlt    String?
+  status      ContentStatus @default(DRAFT)
+  publishedAt DateTime?
+  wordCount   Int           @default(0)
+  readingMins Int           @default(1)
+  featured    Boolean       @default(false)
+  authorId    String
+  author      User          @relation(fields: [authorId], references: [id])
+  categoryId  String?
+  category    Category?     @relation(fields: [categoryId], references: [id])
+  tags        PostTag[]
+  widgets     Widget[]
+  seriesId    String?
+  series      Series?       @relation(fields: [seriesId], references: [id])
+  seriesOrder Int?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([kind, status, publishedAt])
+}
+
+model Note {
+  id          String        @id @default(cuid())
+  slug        String        @unique
+  title       String?
+  bodyMd      String
+  status      ContentStatus @default(DRAFT)
+  publishedAt DateTime?
+  authorId    String
+  author      User          @relation(fields: [authorId], references: [id])
+  categoryId  String?
+  category    Category?     @relation(fields: [categoryId], references: [id])
+  tags        NoteTag[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, publishedAt])
+}
+
+model Widget {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  name      String
+  r2Key     String
+  url       String
+  title     String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@unique([postId, name])
+}
+
+model Page {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String
+  bodyMd    String
+  updatedAt DateTime @updatedAt
+}
+
+model Media {
+  id        String   @id @default(cuid())
+  bucket    String
+  key       String   @unique
+  url       String
+  mimeType  String
+  size      Int
+  width     Int?
+  height    Int?
+  alt       String?
+  postId    String?
+  createdAt DateTime @default(now())
+}
+
+model PostTag {
+  postId String
+  tagId  String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+}
+
+model NoteTag {
+  noteId String
+  tagId  String
+  note   Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+}
+
+/// Site-wide settings edited in the admin; values override the SITE_* environment defaults.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+/// Old public URLs of posts whose slug changed after publishing (served as permanent redirects by the web app).
+model SlugRedirect {
+  id        String   @id @default(cuid())
+  section   String // 'posts' | 'infographic'
+  oldSlug   String
+  newSlug   String
+  createdAt DateTime @default(now())
+
+  @@unique([section, oldSlug])
+}
