@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: salmon
+      POSTGRES_PASSWORD: salmon
+      POSTGRES_DB: salmon
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # S3-compatible object storage for dev (swap for Cloudflare R2 in prod; the code only speaks the S3 API).
+  # MinIO's Docker Hub image is no longer published, so dev uses RustFS. Buckets are created by the API on boot.
+  storage:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    environment:
+      RUSTFS_ACCESS_KEY: salmon
+      RUSTFS_SECRET_KEY: salmon-secret
+      RUSTFS_ADDRESS: ':9000'
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - storagedata:/data
+
+volumes:
+  pgdata:
+  storagedata:
