@@ -1,0 +1,20 @@
+{
+  "theme.toLight": "Chuyển sang giao diện sáng",
+  "theme.toDark": "Chuyển sang giao diện tối",
+  "nav.search": "Tìm kiếm",
+  "nav.main": "Điều hướng chính",
+  "search.title": "Tìm kiếm",
+  "search.keyword": "Từ khoá",
+  "search.placeholder": "Nhập từ khoá, không cần gõ dấu…",
+  "search.submit": "Tìm",
+  "search.types": "Loại nội dung",
+  "search.tooShort": "Từ khoá cần ít nhất 2 ký tự.",
+  "search.rateLimited": "Bạn tìm kiếm quá nhanh, vui lòng thử lại sau ít phút.",
+  "search.failed": "Không tìm kiếm được lúc này, vui lòng thử lại sau.",
+  "search.none": "Không có kết quả nào cho “{q}”.",
+  "search.count": "{n} kết quả cho “{q}”",
+  "pagination.prev": "← Trước",
+  "pagination.next": "Sau →",
+  "pagination.label": "Phân trang",
+  "pagination.page": "Trang {page} / {pages}"
+}

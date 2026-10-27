@@ -1,0 +1,117 @@
+@import 'tailwindcss';
+@import '../styles/tokens.css';
+@plugin '@tailwindcss/typography';
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-note: var(--surface-note);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-highlight: var(--highlight);
+  --color-border: var(--border);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+  --container-measure: var(--measure);
+  --radius-card: var(--radius-card);
+}
+
+html {
+  font-size: var(--text-base);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-serif);
+  line-height: var(--leading-base);
+  -webkit-font-smoothing: antialiased;
+}
+
+a:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Article typography, wired to the site tokens. */
+.prose-salmon {
+  --tw-prose-body: var(--fg);
+  --tw-prose-headings: var(--fg);
+  --tw-prose-lead: var(--muted);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--fg);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-bullets: var(--border);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--fg);
+  --tw-prose-quote-borders: var(--border);
+  --tw-prose-captions: var(--muted);
+  --tw-prose-code: var(--fg);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+  font-size: 1rem;
+  line-height: var(--leading-base);
+}
+.prose-salmon a:hover {
+  color: var(--accent-hover);
+}
+.prose-salmon pre.shiki {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.prose-salmon :not(pre) > code {
+  background: var(--surface-note);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  font-weight: 400;
+}
+.prose-salmon :not(pre) > code::before,
+.prose-salmon :not(pre) > code::after {
+  content: none;
+}
+.prose-salmon .heading-anchor {
+  margin-left: 0.4em;
+  color: var(--border);
+  text-decoration: none;
+  opacity: 0;
+}
+.prose-salmon :is(h2, h3):hover .heading-anchor,
+.prose-salmon .heading-anchor:focus {
+  opacity: 1;
+}
+.prose-salmon img {
+  border-radius: var(--radius-card);
+}
+
+/* Embedded widgets (see components/content/WidgetRuntime). The placeholder text shows until the iframe mounts, and
+   stays as the no-JS fallback. */
+figure.widget { margin: 2rem 0; }
+figure.widget > p:first-child { margin: 0; padding: 1rem; border: 1px dashed var(--border); border-radius: 0.75rem; color: var(--muted); text-align: center; }
+figure.widget[data-mounted] > p:first-child { display: none; }
+figure.widget > .widget-frame { display: block; width: 100%; border: 0; border-radius: 0.75rem; background: var(--bg); }
+figure.widget > figcaption { margin-top: 0.5rem; color: var(--muted); font-size: 0.875rem; text-align: center; }
+
+/* Shiki is rendered with both themes as CSS variables; pick one by the active site theme. */
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+}
+:root[data-theme='dark'] .shiki,
+:root[data-theme='dark'] .shiki span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+}

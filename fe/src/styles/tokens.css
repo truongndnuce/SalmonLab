@@ -1,0 +1,42 @@
+/* Design tokens sampled from the reference site (ARCHITECTURE.md §7.6). */
+:root {
+  --bg: #ffffff;
+  --surface: #fcfbf7;
+  --surface-note: #fbfaf4;
+  --fg: #292724;
+  --muted: #7d7364;
+  --accent: #7c4530;
+  --accent-hover: #5f3322; /* estimated: ~20% darker than --accent */
+  --highlight: #eba500;
+  --border: #d2cdc0;
+  --on-accent: #ffffff;
+  --danger: #b91c1c;
+  --warn: #92400e;
+
+  --font-serif: var(--font-lora), 'Noto Serif', Georgia, 'Times New Roman', serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  --text-base: 17px;
+  --leading-base: 1.6;
+  --measure: 640px;
+  --radius-card: 8px;
+  --radius-pill: 999px;
+}
+
+/* Dark theme: explicit choice (data-theme) wins; with no stored choice the system preference applies (see the
+   inline script in app/layout.tsx, which sets data-theme before first paint). */
+:root[data-theme='dark'] {
+  --bg: #1c1a17;
+  --surface: #23201c;
+  --surface-note: #272420;
+  --fg: #e8e3d9;
+  --muted: #a39a8a;
+  --accent: #e0a47c;
+  --accent-hover: #f0bb98;
+  --highlight: #eba500;
+  --border: #3d3830;
+  --on-accent: #1c1a17;
+  --danger: #f08a80;
+  --warn: #f0b34a;
+  color-scheme: dark;
+}
