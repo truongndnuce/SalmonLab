@@ -22,6 +22,11 @@ type View = 'split' | 'write' | 'preview';
 /** CodeMirror editor next to a live preview rendered by the same pipeline as the public site. */
 export default function MarkdownEditor({ value, onChange, minHeight = '480px' }: Props) {
   const [view, setView] = useState<View>('split');
+
+  // Side by side only fits wide screens; on phones/tablets start in write mode instead of two stacked panes.
+  useEffect(() => {
+    if (window.matchMedia('(max-width: 1023px)').matches) setView((v) => (v === 'split' ? 'write' : v));
+  }, []);
   const [html, setHtml] = useState('');
   const [previewError, setPreviewError] = useState<string | null>(null);
 
@@ -105,12 +110,12 @@ export default function MarkdownEditor({ value, onChange, minHeight = '480px' }:
     };
   }, [value, view]);
 
-  const tab = (v: View, label: string) => (
+  const tab = (v: View, label: string, cls = '') => (
     <button
       type="button"
       onClick={() => setView(v)}
       aria-pressed={view === v}
-      className={`rounded-md px-3 py-1 text-sm ${view === v ? 'bg-bg font-semibold text-accent shadow-sm' : 'text-muted hover:text-fg'}`}
+      className={`${cls} rounded-md px-3 py-1 text-sm ${view === v ? 'bg-bg font-semibold text-accent shadow-sm' : 'text-muted hover:text-fg'}`}
     >
       {label}
     </button>
@@ -118,16 +123,18 @@ export default function MarkdownEditor({ value, onChange, minHeight = '480px' }:
 
   return (
     <div>
-      <div className="mb-2 inline-flex gap-1 rounded-lg border border-border bg-surface-note p-0.5" role="group" aria-label="Chế độ soạn thảo">
-        {tab('split', 'Song song')}
-        {tab('write', 'Viết')}
-        {tab('preview', 'Xem trước')}
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <div className="inline-flex gap-1 rounded-lg border border-border bg-surface-note p-0.5" role="group" aria-label="Chế độ soạn thảo">
+          {tab('split', 'Song song', 'hidden lg:block')}
+          {tab('write', 'Viết')}
+          {tab('preview', 'Xem trước')}
+        </div>
+        {view !== 'preview' && (
+          <button type="button" onClick={() => setPicker(true)} className="rounded-md border border-border px-3 py-1 text-sm hover:border-accent hover:text-accent">
+            Chèn ảnh
+          </button>
+        )}
       </div>
-      {view !== 'preview' && (
-        <button type="button" onClick={() => setPicker(true)} className="ml-3 rounded-md border border-border px-3 py-1 text-sm hover:border-accent hover:text-accent">
-          Chèn ảnh
-        </button>
-      )}
       {uploadNote && <p className="mb-2 text-sm text-muted" role="status">{uploadNote}</p>}
       {picker && (
         <MediaPicker

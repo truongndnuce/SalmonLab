@@ -87,7 +87,7 @@ export default function PostsAdminPage() {
           <option value="POST">Bài viết</option>
           <option value="INFOGRAPHIC">Infographic</option>
         </select>
-        <input aria-label="Tìm theo tiêu đề" className={`${inputCls} !w-60`} placeholder="Tìm theo tiêu đề…" value={q} onChange={(e) => filter(() => setQ(e.target.value))()} />
+        <input aria-label="Tìm theo tiêu đề" className={`${inputCls} !w-full sm:!w-60`} placeholder="Tìm theo tiêu đề…" value={q} onChange={(e) => filter(() => setQ(e.target.value))()} />
       </div>
 
       <ErrorNote message={error ?? actionError} />
@@ -96,29 +96,32 @@ export default function PostsAdminPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-note text-xs uppercase tracking-wider text-muted">
             <tr>
-              <th className="px-4 py-2 font-medium">Tiêu đề</th>
-              <th className="px-4 py-2 font-medium">Trạng thái</th>
+              <th className="px-3 py-2 font-medium md:px-4">Tiêu đề</th>
+              <th className="hidden px-4 py-2 font-medium md:table-cell">Trạng thái</th>
               <th className="hidden px-4 py-2 font-medium md:table-cell">Danh mục</th>
               <th className="hidden px-4 py-2 font-medium md:table-cell">Cập nhật</th>
-              <th className="px-4 py-2" />
+              <th className="px-3 py-2 md:px-4" />
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {data?.map((p) => (
               <tr key={p.id} className="align-middle">
-                <td className="px-4 py-2.5">
+                <td className="px-3 py-2.5 md:px-4">
                   <Link href={`/admin/posts/${p.id}`} className="font-medium text-accent hover:underline">
                     {p.title}
                   </Link>
                   {p.kind === 'INFOGRAPHIC' && <span className="ml-2 text-xs text-muted">infographic</span>}
+                  <div className="mt-1 md:hidden">
+                    <StatusBadge status={p.status} publishedAt={p.publishedAt} />
+                  </div>
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="hidden px-4 py-2.5 md:table-cell">
                   <StatusBadge status={p.status} publishedAt={p.publishedAt} />
                 </td>
                 <td className="hidden px-4 py-2.5 text-muted md:table-cell">{p.category?.name ?? '—'}</td>
                 <td className="hidden px-4 py-2.5 text-muted md:table-cell">{shortDate(p.updatedAt)}</td>
-                <td className="px-4 py-2.5">
-                  <div className="flex justify-end gap-2">
+                <td className="px-3 py-2.5 md:px-4">
+                  <div className="flex flex-col items-end gap-2 sm:flex-row">
                     {p.status === 'PUBLISHED' ? (
                       <Button onClick={() => void act(() => post(`/admin/posts/${p.id}/unpublish`), 'Đã gỡ xuất bản')}>Gỡ</Button>
                     ) : (

@@ -23,7 +23,6 @@ export class SiteController {
           { label: 'Bài viết', href: '/posts' },
           { label: 'Ghi chú', href: '/notes' },
           { label: 'Infographic', href: '/infographic' },
-          { label: 'Giới thiệu', href: '/about' },
         ],
         social: [],
       },
